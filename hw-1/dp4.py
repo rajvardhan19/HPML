@@ -21,9 +21,6 @@ def main():
     A = np.ones(N, dtype=np.float32)
     B = np.ones(N, dtype=np.float32)
 
-    if N >= 100_000_000:
-        print(f"WARNING: N={N} with a Python manual loop will be extremely time consuming"
-              f"(estimated hours). Running as required...", file=sys.stderr)
 
     times = []
     for r in range(reps):

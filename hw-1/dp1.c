@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
     double bandwidth = bytes / avg_time / 1e9;
     double flops     = 2.0 * N / avg_time;
 
-    printf("N: %ld   <T>: %f sec  B: %.3f GB/sec  F: %.3f FLOPs/sec",
+    printf("N: %ld   <T>: %f sec  B: %.3f GB/sec  F: %.3f FLOPs/sec \n",
            N, avg_time, bandwidth, flops);
 
     free(pA); free(pB); free(times);

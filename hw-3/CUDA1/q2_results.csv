@@ -1,0 +1,16 @@
+K_millions,scenario,time_ms
+1,1block_1thread,65.406
+1,1block_256threads,1.443
+1,Nblocks_256threads,0.020
+5,1block_1thread,300.988
+5,1block_256threads,6.650
+5,Nblocks_256threads,0.078
+10,1block_1thread,592.451
+10,1block_256threads,13.272
+10,Nblocks_256threads,0.151
+50,1block_1thread,2957.035
+50,1block_256threads,66.269
+50,Nblocks_256threads,0.731
+100,1block_1thread,5916.501
+100,1block_256threads,134.046
+100,Nblocks_256threads,1.451

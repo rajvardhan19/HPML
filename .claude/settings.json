@@ -3,7 +3,8 @@
     "allow": [
       "Bash(gcloud compute:*)",
       "Bash(ls -lh /Users/rajvardhan/Desktop/Projects/HPML/hw-3/UNI/Part-B/*.jpg)",
-      "Bash(file /Users/rajvardhan/Desktop/Projects/HPML/hw-3/UNI/Part-B/*.jpg)"
+      "Bash(file /Users/rajvardhan/Desktop/Projects/HPML/hw-3/UNI/Part-B/*.jpg)",
+      "Read(//private/tmp/**)"
     ]
   }
 }

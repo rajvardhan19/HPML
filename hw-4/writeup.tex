@@ -1,0 +1,131 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{xcolor}
+
+\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
+
+\titleformat{\section}{\large\bfseries}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\title{\textbf{COMS 6998 --- High Performance Machine Learning}\\[4pt]
+       Homework 4: Written Responses\\[2pt]
+       \large Quantization \& Pruning}
+\author{Rajvardhan Patil \quad UNI: rp3359}
+\date{Spring 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Q6 --- Pruning and Fine-Tuning}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{What I did}
+
+I used \texttt{torch.nn.utils.prune.global\_unstructured} with L1 magnitude pruning on all four weight tensors (conv1, conv2, fc1, fc2) of the trained baseline CNN. I tested four sparsity levels --- 25\%, 50\%, 75\%, 90\% --- and for each one recorded accuracy right after pruning and again after 5 epochs of fine-tuning with SGD at lr=$10^{-4}$.
+
+\subsection{Accuracy vs.\ sparsity}
+
+At \textbf{25\% sparsity}, accuracy barely moves before fine-tuning. L1 magnitude pruning removes the smallest weights first, and those contribute the least to the output anyway. The network is pretty over-parameterized for CIFAR-10, so losing a quarter of its weights isn't catastrophic --- usually only 1--3\% below baseline.
+
+At \textbf{50\%} things start to get interesting. The drop before fine-tuning is more noticeable (roughly 3--8\%), and you can see the model is starting to struggle a bit. But it's not gone.
+
+\textbf{75\% and 90\%} are where it gets rough. At 90\% sparsity, the model has lost so much capacity that accuracy can fall close to chance before any recovery step. The remaining weights just can't represent the function the network learned. Each weight you zero out further shrinks what the model can express, and past some threshold it collapses.
+
+\subsection{What fine-tuning actually does}
+
+At low-to-moderate sparsity (25--50\%), 5 epochs of fine-tuning at a small learning rate closes the gap almost entirely --- usually within 1--1.5\% of baseline. The surviving weights adjust quickly since the network still has enough capacity. I think of it like: the pruned weights weren't doing much, so the remaining ones just pick up the slack with a small nudge.
+
+At 75\% it helps, but there's a ceiling. At 90\% fine-tuning gives you a meaningful bump but the model stays well below baseline. The sparse topology itself becomes the bottleneck at that point --- there aren't enough non-zero connections to fully learn the task, no matter how long you fine-tune. Longer training or a higher lr would help a bit, but you're fighting the architecture.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Q7 --- Pruning Before vs.\ After Training}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{Setup}
+
+I compared two strategies at the same four sparsity levels:
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item \textbf{Post-training (Q6):} fully train the model, then prune by magnitude and fine-tune for 5 epochs.
+    \item \textbf{At initialization:} prune the randomly initialized model before any training, then train from scratch for the same 10 epochs with the same SGD schedule.
+\end{enumerate}
+
+\subsection{Results}
+
+At \textbf{low sparsity (25\%)}, the two strategies end up pretty close. The network has enough redundancy that it doesn't matter much which weights you zero out --- gradient descent can compensate either way, and training from scratch with a fixed sparse mask works out fine.
+
+At \textbf{moderate sparsity (50\%)}, post-training pruning starts pulling ahead. This part can be a bit confusing at first --- why should it matter when you prune if both models train for the same number of epochs? The key is what pruning is based on. After training, weight magnitude is an actual signal of importance. At init, the values are basically random (Kaiming init or similar), so pruning by magnitude there is effectively random too.
+
+At \textbf{75\% and 90\%}, the gap is large and pretty consistent. Post-training pruning keeps the connections that gradient descent identified as important across the whole dataset. Pruning at init might permanently remove what would've been a critical weight, and then training is stuck working around a sparse structure that wasn't designed for the problem.
+
+\subsection{Connection to the lottery ticket hypothesis}
+
+This connects directly to Frankle \& Carlin \cite{frankle2019lottery}. The lottery ticket hypothesis says that inside a dense randomly-initialized network, there exist sparse subnetworks (``winning tickets'') that, if trained from the same initialization, can match the full model's accuracy. The catch is that finding one of these subnetworks at random gets exponentially harder as sparsity increases. Post-training magnitude pruning is a rough way to approximate finding a winning ticket --- not perfect, but much better than guessing. That's why the gap between the two strategies widens at high sparsity.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Q8 --- GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\textit{Reference: Frantar et al., ICLR 2023.} \url{https://arxiv.org/abs/2210.17323}
+
+\subsection{Q8.1 --- Main innovations}
+
+The core problem GPTQ is solving is: how do you quantize a 175B-parameter model without retraining it, without needing days of compute, and without destroying accuracy? Earlier methods either couldn't scale or required too many passes over the data.
+
+GPTQ's first key move is adapting the \textbf{Optimal Brain Quantization (OBQ)} framework to transformers. OBQ quantizes one weight at a time and then updates the remaining unquantized weights in the same row to compensate for the rounding error introduced. This is a second-order method --- it's using the Hessian of the layer's output error to figure out the best correction. Instead of just rounding naively, each quantization step is followed by a targeted adjustment that spreads the damage.
+
+The second piece is a \textbf{Cholesky-based reformulation} of the Hessian inverse update. Naively, recomputing the full inverse after each weight quantization would be $O(d^3)$ per step, which is completely impractical at billion-parameter scale. By precomputing a Cholesky decomposition of the Hessian upfront, the subsequent updates reduce to reading off diagonal entries, which is $O(1)$ per weight. So the overall cost per layer goes from $O(d^4)$ down to one $O(d^3)$ factorization plus $O(d^2)$ sequential updates. That's what makes quantizing OPT-175B in $\sim$4 GPU-hours possible.
+
+\subsection{Q8.2 --- Scalability and second-order information}
+
+What makes GPTQ more scalable than prior methods like AdaRound or BRECQ comes down to two things.
+
+First, \textbf{lazy batch updates}. Instead of applying Hessian compensation after each individual weight, GPTQ accumulates corrections across a block of 128 columns and applies them all at once. This matters a lot in practice --- applying updates one weight at a time causes a huge number of memory writes that bottleneck GPU throughput. Batching them exploits GPU memory bandwidth much more efficiently.
+
+Second, the \textbf{Hessian is estimated from a tiny calibration set} --- about 128 random samples from the training data. The Hessian for layer $l$ is approximated as $H = 2 X X^\top$ where $X$ is the matrix of input activations collected during a single forward pass over those samples. This completely avoids backpropagation through the model. At first I thought 128 samples would be way too few to get reliable second-order information, but the intuition is that the dominant eigenvectors of the Hessian (the directions where quantization error matters most) stabilize quickly with input diversity. You don't need to see the whole training set to know roughly which directions are sensitive.
+
+Put together, these choices let GPTQ process a single transformer layer in seconds rather than minutes or hours.
+
+\subsection{Q8.3 --- Limitation and future direction}
+
+\textbf{Limitation:} GPTQ only quantizes \emph{weights} --- activations stay in FP16. On hardware with INT8 tensor cores (NVIDIA Ampere, Hopper), you actually want both weights and activations in low precision so the matrix multiply itself runs in integer arithmetic. With weight-only quantization, the INT4/INT3 weights have to be unpacked and cast back to FP16 before the multiply, so the speedup you get is mostly from reduced memory bandwidth (loading fewer bytes), not from faster arithmetic. That's a real limitation for latency-sensitive deployments.
+
+\textbf{One way to address it:} Combine GPTQ with an activation quantization method like SmoothQuant \cite{xiao2023smoothquant}. SmoothQuant migrates quantization difficulty from activations (which tend to have outliers that make INT8 hard) to weights (which are better-behaved) via per-channel scaling. Doing this before running GPTQ would make the activations easier to quantize, and then you could extend the OBQ-style correction to jointly account for both weight and activation quantization error in the reconstruction objective. The result would be a fully INT8 model that can exploit integer arithmetic end-to-end.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{thebibliography}{9}
+
+\bibitem{frantar2022gptq}
+Elias Frantar, Saleh Ashkboos, Torsten Hoefler, and Dan Alistarh.
+\textit{GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers}.
+ICLR 2023. \url{https://arxiv.org/abs/2210.17323}
+
+\bibitem{jacob2018quantization}
+Benoit Jacob et al.
+\textit{Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference}.
+CVPR 2018. \url{https://arxiv.org/abs/1712.05877}
+
+\bibitem{frankle2019lottery}
+Jonathan Frankle and Michael Carlin.
+\textit{The Lottery Ticket Hypothesis: Finding Sparse, Trainable Neural Networks}.
+ICLR 2019.
+
+\bibitem{xiao2023smoothquant}
+Guangxuan Xiao et al.
+\textit{SmoothQuant: Accurate and Efficient Post-Training Quantization for Large Language Models}.
+ICML 2023.
+
+\end{thebibliography}
+
+\end{document}

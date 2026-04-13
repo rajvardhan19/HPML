@@ -1,13 +1,4 @@
-///
-/// q1.cpp
-/// For COMS E6998 Spring 2026 — HW3 Part-B, Q1
-///
-/// CPU-only vector addition benchmark.
-/// Adds two arrays of K million float elements on the host.
-/// Runs for K = 1, 5, 10, 50, 100 million elements.
-///
-/// Outputs CSV to stdout: K_millions,time_ms
-///
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,10 +28,8 @@ int main() {
 
         for (int i = 0; i < N; i++) { A[i] = 1.0f; B[i] = 2.0f; }
 
-        // Warm-up
         for (int i = 0; i < N; i++) C[i] = A[i] + B[i];
 
-        // Timed run
         double t0 = now_ms();
         for (int i = 0; i < N; i++) C[i] = A[i] + B[i];
         double t1 = now_ms();

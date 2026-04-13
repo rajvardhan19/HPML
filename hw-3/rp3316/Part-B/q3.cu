@@ -1,18 +1,3 @@
-///
-/// q3.cu
-/// For COMS E6998 Spring 2026 — HW3 Part-B, Q3
-///
-/// GPU vector addition WITH CUDA Unified Memory (cudaMallocManaged).
-/// Same three scenarios as Q2, same K values.
-/// No explicit cudaMemcpy — the runtime handles page migration.
-///
-///   Scenario 1: 1 block,  1 thread
-///   Scenario 2: 1 block, 256 threads
-///   Scenario 3: ceil(N/256) blocks, 256 threads
-///
-/// Outputs CSV to stdout: K_millions,scenario,time_ms
-///
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <cuda_runtime.h>
@@ -28,7 +13,6 @@ __global__ void vecadd_unified(const float* A, const float* B, float* C, int N)
 static float time_scenario(float* A, float* B, float* C, int N,
                             int nblocks, int nthreads)
 {
-    // Warm-up (migrates pages to GPU)
     vecadd_unified<<<nblocks, nthreads>>>(A, B, C, N);
     cudaDeviceSynchronize();
 
@@ -60,24 +44,19 @@ int main()
         int N = K * 1000000;
         size_t size = (size_t)N * sizeof(float);
 
-        // Unified memory — accessible from both CPU and GPU
         float *A, *B, *C;
         cudaMallocManaged(&A, size);
         cudaMallocManaged(&B, size);
         cudaMallocManaged(&C, size);
 
-        // Init on CPU; pages start on host and migrate to GPU on first kernel touch
         for (int i = 0; i < N; i++) { A[i] = 1.0f; B[i] = 2.0f; }
 
-        // Scenario 1: 1 block, 1 thread
         float t1 = time_scenario(A, B, C, N, 1, 1);
         printf("%d,1block_1thread,%.3f\n", K, t1);
 
-        // Scenario 2: 1 block, 256 threads
         float t2 = time_scenario(A, B, C, N, 1, 256);
         printf("%d,1block_256threads,%.3f\n", K, t2);
 
-        // Scenario 3: ceil(N/256) blocks, 256 threads
         int nblocks = (N + 255) / 256;
         float t3 = time_scenario(A, B, C, N, nblocks, 256);
         printf("%d,Nblocks_256threads,%.3f\n", K, t3);

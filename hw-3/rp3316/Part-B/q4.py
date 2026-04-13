@@ -1,22 +1,10 @@
-"""
-q4.py
-For COMS E6998 Spring 2026 — HW3 Part-B, Q4
-
-Reads q1_results.csv, q2_results.csv, q3_results.csv produced by ./q1, ./q2, ./q3
-and generates two log-log plots:
-  q4_without_unified.jpg  — GPU (explicit memory) vs CPU
-  q4_with_unified.jpg     — GPU (unified memory) vs CPU
-"""
-
 import matplotlib
-matplotlib.use("Agg")          # no display required
+matplotlib.use("Agg")          
 import matplotlib.pyplot as plt
 import csv, os, subprocess, sys
 
-# ── helpers ────────────────────────────────────────────────────────────────────
 
 def run_and_save(cmd, outfile):
-    """Run a command and save stdout to outfile, then return the path."""
     print(f"Running: {cmd}")
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     with open(outfile, "w") as f:
@@ -24,7 +12,6 @@ def run_and_save(cmd, outfile):
     return outfile
 
 def read_q1(path):
-    """Returns {K_int: time_ms}"""
     data = {}
     with open(path) as f:
         reader = csv.DictReader(f)
@@ -33,7 +20,6 @@ def read_q1(path):
     return data
 
 def read_q23(path):
-    """Returns {scenario_name: {K_int: time_ms}}"""
     data = {}
     with open(path) as f:
         reader = csv.DictReader(f)
@@ -44,7 +30,6 @@ def read_q23(path):
             data.setdefault(s, {})[k] = t
     return data
 
-# ── collect results if CSV files not already present ──────────────────────────
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -60,10 +45,10 @@ if not os.path.exists(q3_csv):
     run_and_save(f"{script_dir}/q3", q3_csv)
 
 cpu_data = read_q1(q1_csv)
-gpu_data = read_q23(q2_csv)        # without unified memory
-uni_data = read_q23(q3_csv)        # with unified memory
+gpu_data = read_q23(q2_csv)        
+uni_data = read_q23(q3_csv)       
 
-K_list = sorted(cpu_data.keys())   # [1, 5, 10, 50, 100]
+K_list = sorted(cpu_data.keys())   
 
 scenario_labels = {
     "1block_1thread":      "GPU: 1 block / 1 thread",
@@ -76,16 +61,13 @@ colors = {
     "Nblocks_256threads": "tab:blue",
 }
 
-# ── plot helper ────────────────────────────────────────────────────────────────
 
 def make_plot(gpu_dict, title, outpath):
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    # CPU line
     ax.plot(K_list, [cpu_data[k] for k in K_list],
             marker="s", color="tab:red", linestyle="--", label="CPU (host only)")
 
-    # GPU scenario lines
     for s, label in scenario_labels.items():
         if s not in gpu_dict:
             continue

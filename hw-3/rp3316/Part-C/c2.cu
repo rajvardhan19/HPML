@@ -1,19 +1,3 @@
-///
-/// c2.cu
-/// For COMS E6998 Spring 2026 — HW3 Part-C, C2
-///
-/// Tiled CUDA convolution using shared memory.
-///
-/// Each 16x16 thread block covers a TILE×TILE output patch for one output channel k.
-/// For each input channel c, the (TILE+FH-1)×(TILE+FW-1) input halo is cooperatively
-/// loaded into shared memory; the convolution is then computed from smem.
-///
-/// Same double-precision initialization and true-convolution formula as C1.
-/// Checksum should match C1 exactly (to floating-point precision).
-///
-/// Last stdout line: CSV "checksum,time_ms"
-///
-
 #include <stdio.h>
 #include <stdlib.h>
 #include "timer.h"
@@ -27,23 +11,22 @@
 #define P_DIM   1
 #define TILE    16
 
-// Shared-memory halo dimensions (compile-time constants required by CUDA)
-#define HALO_H  (TILE + FH_DIM - 1)   // 18
-#define HALO_W  (TILE + FW_DIM - 1)   // 18
+#define HALO_H  (TILE + FH_DIM - 1)   
+#define HALO_W  (TILE + FW_DIM - 1)   
 
 __global__ void conv_c2(
-    const double* __restrict__ I0,   // [C][H0][W0]  (already padded)
-    const double* __restrict__ F,    // [K][C][FH][FW]
-          double* __restrict__ O,    // [K][H][W]
+    const double* __restrict__ I0,   
+    const double* __restrict__ F,    
+          double* __restrict__ O,    
     int C, int K, int H, int W, int FH, int FW)
 {
     __shared__ double smem[HALO_H][HALO_W];
 
     int tx = threadIdx.x;
     int ty = threadIdx.y;
-    int ow = blockIdx.x * TILE + tx;   // output column
-    int oh = blockIdx.y * TILE + ty;   // output row
-    int k  = blockIdx.z;               // output channel
+    int ow = blockIdx.x * TILE + tx;   
+    int oh = blockIdx.y * TILE + ty;   
+    int k  = blockIdx.z;               
 
     const int H0 = H + 2;
     const int W0 = W + 2;
@@ -51,18 +34,15 @@ __global__ void conv_c2(
     double val = 0.0;
 
     for (int c = 0; c < C; c++) {
-        // Top-left corner of the I0 patch this block needs
         int base_h = blockIdx.y * TILE;
         int base_w = blockIdx.x * TILE;
 
-        // Cooperative load of the (HALO_H × HALO_W) I0 patch into smem
         for (int r = ty; r < HALO_H; r += TILE)
             for (int s = tx; s < HALO_W; s += TILE)
                 smem[r][s] = I0[c * H0*W0 + (base_h + r)*W0 + (base_w + s)];
 
         __syncthreads();
 
-        // Compute convolution from smem (true conv: flip filter)
         if (ow < W && oh < H) {
             for (int fh = 0; fh < FH; fh++)
                 for (int fw = 0; fw < FW; fw++) {
@@ -92,7 +72,6 @@ int main()
     double* h_F  = (double*)malloc(sz_F);
     double* h_O  = (double*)malloc(sz_O);
 
-    // Same initialization as C1
     for (int c = 0; c < C; c++)
         for (int h = 0; h < H; h++)
             for (int w = 0; w < W; w++)
@@ -114,11 +93,9 @@ int main()
     dim3 block(TILE, TILE, 1);
     dim3 grid((W + TILE-1)/TILE, (H + TILE-1)/TILE, K);
 
-    // Warm-up
     conv_c2<<<grid, block>>>(d_I0, d_F, d_O, C, K, H, W, FH, FW);
     cudaDeviceSynchronize();
 
-    // Timed run
     initialize_timer(); start_timer();
     conv_c2<<<grid, block>>>(d_I0, d_F, d_O, C, K, H, W, FH, FW);
     cudaDeviceSynchronize();
